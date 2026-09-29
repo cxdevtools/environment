@@ -19,8 +19,8 @@ cxdev_zshrc="${ZDOTDIR:-${HOME}}/.zshrc"
 
 # Global variables
 export CXDEV_DOWNLOAD_URL="https://github.com/cxdevtools/environment/archive/refs/tags/"
-export CXDEV_VERSION="1.3.4"
-export CXDEV_HASH="716a323bb22efb1960884421c54700ff"
+export CXDEV_VERSION="1.3.5"
+export CXDEV_HASH="daa22017c63c8d6408546453ace1dcfa"
 export CXDEV_INSTALL_DIR="${CXDEV_INSTALL_DIR:-$HOME/.cxdev}"
 
 _installCXDEVEnvironment () {
