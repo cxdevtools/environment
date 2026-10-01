@@ -1,0 +1,4 @@
+UPDATE users
+SET createdts = CURRENT_TIMESTAMP,
+    modifiedts = CURRENT_TIMESTAMP
+WHERE 1=1;

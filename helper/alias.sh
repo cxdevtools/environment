@@ -1,29 +1,34 @@
 # CX DEV Environment Alias
 alias yLW='yLoadWorkspace'
+alias ylw='yLoadWorkspace'
 alias yGC='yGlobalConfig'
+alias ygc='yGlobalConfig'
 alias yloadworkspace='yLoadWorkspace'
 alias yglobalconfig='yGlobalConfig'
+alias yextendlicense='yExtendLicense'
+alias yupdateenvironment='bash <(curl -fsSL https://raw.githubusercontent.com/sapcxtools/environment/refs/heads/develop/install.sh)'
 
 alias toworkspace='cd "$CXDEV_WORKSPACE_HOME"'
 alias toplatform='cd "$CXDEV_PLATFORM_HOME"'
 alias toconfig='cd "$CXDEV_OPT_CONFIG_DIR"'
 alias tostorefront='cd "$CXDEV_STOREFRONT_HOME"'
 
+alias yinfo='yShowWorkspace'
 alias yreload='yLoadWorkspace "$CXDEV_WORKSPACE_HOME" "$CXDEV_WORKSPACE_NAME"'
 alias ysetup='yreload && ./gradlew setupLocalDevelopment && yreload'
+alias yresetup='yreload && ./gradlew cleanPlatform setupLocalDevelopment && yreload'
 alias yreformat='toworkspace && ./gradlew spotlessApply'
 
 alias yserver='toplatform && ant customize server && toworkspace'
 alias ybuild='toplatform && ant build && toworkspace'
 alias yrebuild='toplatform && ant clean customize all && toworkspace'
-alias yrush='toplatform && cd ../modules/smartedit/smartedittools && ant rushupdatefull -Dpath=./ && ant rushrebuilddev -Dpath=./ && toworkspace'
 alias yinit='toplatform && ant initialize -Dtenant=master && toworkspace'
 alias yreinit='toplatform && ant clean customize all initialize -Dtenant=master && toworkspace'
 
 alias ystart='yserver && toplatform && ./hybrisserver.sh'
 alias ydebug='yserver && toplatform && ./hybrisserver.sh debug'
 alias ystorefront='tostorefront && npm run start'
-alias ystorefrontssl='tostorefront && npm run local'
+alias ystorefrontssl='tostorefront && npm run cxdev'
 
 alias ymails='open $CXDEV_PLATFORM_HOME/../../log/mails'
 alias yunittests='toplatform && ant unittests && toworkspace && ytestresult'

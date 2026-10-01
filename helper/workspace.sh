@@ -19,7 +19,7 @@ yLoadWorkspace () {
 	fi
 
 	# Workspace information
-	CXDEV_WORKSPACE_HOME=$(realpath "$1")
+	CXDEV_WORKSPACE_HOME=$(realpath "$1" 2>/dev/null)
 	CXDEV_WORKSPACE_NAME=
 	if [[ "" != "$2" ]]; then
 		CXDEV_WORKSPACE_NAME=$2
@@ -126,6 +126,16 @@ yLoadWorkspace () {
 		echo -e "${_ywarn}[WARN] ${_yblink}Please verify that the node version is the correct for your project!${_yclear}"
 	fi
 
+	# Load gradle environment
+	CXDEV_GRADLE_VERSION=
+	if [ -f "$CXDEV_WORKSPACE_HOME/gradlew" ]; then
+		CXDEV_GRADLE_VERSION=$("$CXDEV_WORKSPACE_HOME/gradlew" --version | grep "^Gradle " | awk '{print $2}')
+		echo -e "${_yinfo}[INFO] Gradle wrapper found, gradle version: ${CXDEV_GRADLE_VERSION}!${_yclear}"
+	else
+		echo -e "${_yinfo}[WARN] No gradle wrapper found!${_yclear}"
+		echo -e "${_ywarn}[WARN] ${_yblink}Please configure a gradle wrapper for your project!${_yclear}"
+	fi
+
 	# Detect platform structure (supported are classic, embedded or CCv2)
 	CXDEV_PLATFORM_HOME=$CXDEV_WORKSPACE_HOME/server/hybris/bin/platform
 	CXDEV_PLATFORM_HOME_ALTERNATIVE=$CXDEV_WORKSPACE_HOME/hybris/bin/platform
@@ -157,9 +167,15 @@ yLoadWorkspace () {
 		fi
 
 		# Load SAP Commerce configuration
-		echo -e "${_yinfo}[INFO] Environment configuration found at: ${_yunderline}$CXDEV_PLATFORM_HOME/env.properties${_yclear}"
-		RELATIVE_CONFIG_DIR=$(cat "$CXDEV_PLATFORM_HOME/env.properties" | grep HYBRIS_CONFIG_DIR | sed "s#HYBRIS_CONFIG_DIR=\\\${platformhome}#.#" | tr -d '\r\n')
-		CXDEV_CONFIG_DIR=$(realpath "$CXDEV_PLATFORM_HOME/$RELATIVE_CONFIG_DIR")
+		if [ -f "$CXDEV_PLATFORM_HOME/env.properties" ]; then
+			echo -e "${_yinfo}[INFO] Environment configuration found at: ${_yunderline}$CXDEV_PLATFORM_HOME/env.properties${_yclear}"
+			RELATIVE_CONFIG_DIR=$(cat "$CXDEV_PLATFORM_HOME/env.properties" 2>/dev/null | grep HYBRIS_CONFIG_DIR | sed "s#HYBRIS_CONFIG_DIR=\\\${platformhome}#.#" | tr -d '\r\n')
+			CXDEV_CONFIG_DIR=$(realpath "$CXDEV_PLATFORM_HOME/$RELATIVE_CONFIG_DIR" 2>/dev/null)
+		else
+			echo -e "${_yinfo}[WARN] No environment configuration found at: ${_yunderline}$CXDEV_PLATFORM_HOME/env.properties${_yclear}"
+			RELATIVE_CONFIG_DIR=../../config
+			CXDEV_CONFIG_DIR=$(realpath "$CXDEV_PLATFORM_HOME/$RELATIVE_CONFIG_DIR" 2>/dev/null)
+		fi
 		echo -e "${_yinfo}[INFO] Using configuration folder at: ${_yunderline}$CXDEV_CONFIG_DIR${_yclear}"
 		if [ -d "$CXDEV_CONFIG_DIR/local-config" ]; then
 			CXDEV_OPT_CONFIG_DIR="$CXDEV_CONFIG_DIR/local-config"
@@ -190,7 +206,7 @@ yLoadWorkspace () {
 		fi
 
 		# Exchange SAP JCO Library (if necessary)
-		SAPJCO_LIB_PATH=$(realpath "$CXDEV_PLATFORM_HOME/../modules/sap-framework-core/sapcorejco/lib")
+		SAPJCO_LIB_PATH=$(realpath "$CXDEV_PLATFORM_HOME/../modules/sap-framework-core/sapcorejco/lib" 2>/dev/null)
 		if [ -d "$SAPJCO_LIB_PATH" ]; then
 			echo -e "${_yinfo}[INFO] SAP JCO Library found at: ${_yunderline}$SAPJCO_LIB_PATH${_yclear}"
 			OS=$(/usr/bin/uname)
@@ -246,6 +262,7 @@ yLoadWorkspace () {
 	export CXDEV_CXDEV_CONFIG_DIR
 	export CXDEV_OPT_CONFIG_DIR
 	export CXDEV_STOREFRONT_HOME
+	export CXDEV_GRADLE_VERSION
 }
 
 yShowWorkspace () {
@@ -274,12 +291,13 @@ yShowWorkspace () {
 			echo -e "==============================================================================="
 		fi
 	fi
-	echo -e "${_ybold}Java version (detected)${_yreset}  ${_yitalic}$CXDEV_JAVA_VERSION${_yreset}"
-	echo -e "${_ybold}Java version file${_yreset}        ${_yitalic}$CXDEV_JAVA_VERSION_FILE${_yreset}"
-	echo -e "${_ybold}Node version (detected)${_yreset}  ${_yitalic}$CXDEV_NODE_VERSION${_yreset}"
-	echo -e "${_ybold}Node version file${_yreset}        ${_yitalic}$CXDEV_NODE_VERSION_FILE${_yreset}"
+	echo -e "${_ybold}Java version (detected)${_yreset}   ${_yitalic}$CXDEV_JAVA_VERSION${_yreset}"
+	echo -e "${_ybold}Java version file${_yreset}         ${_yitalic}$CXDEV_JAVA_VERSION_FILE${_yreset}"
+	echo -e "${_ybold}Node version (detected)${_yreset}   ${_yitalic}$CXDEV_NODE_VERSION${_yreset}"
+	echo -e "${_ybold}Node version file${_yreset}         ${_yitalic}$CXDEV_NODE_VERSION_FILE${_yreset}"
+	echo -e "${_ybold}Gradle version (detected)${_yreset} ${_yitalic}$CXDEV_GRADLE_VERSION${_yreset}"
 	echo -e "==============================================================================="
-	echo -ne "${_yclear}"
+	echo -e "${_yclear}"
 }
 
 _yLoadWorkspaceHelp () {

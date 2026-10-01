@@ -18,10 +18,10 @@ cxdev_bashrc="${HOME}/.bashrc"
 cxdev_zshrc="${ZDOTDIR:-${HOME}}/.zshrc"
 
 # Global variables
-export CXDEV_DOWNLOAD_URL="https://github.com/sapcxtools/environment/archive/refs/tags/"
-export CXDEV_VERSION="1.3.2"
-export CXDEV_HASH="d0093e2381367b1b8bf1b6a27bb9809c"
-export CXDEV_INSTALL_DIR="$HOME/.cxdev"
+export CXDEV_DOWNLOAD_URL="https://github.com/cxdevtools/environment/archive/refs/tags/"
+export CXDEV_VERSION="1.3.5"
+export CXDEV_HASH="daa22017c63c8d6408546453ace1dcfa"
+export CXDEV_INSTALL_DIR="${CXDEV_INSTALL_DIR:-$HOME/.cxdev}"
 
 _installCXDEVEnvironment () {
 	echo "  ___  _  _  ____  ____  _  _ "
@@ -51,11 +51,10 @@ _installCXDEVEnvironment () {
 			echo "This version is already installed."
 			exit 0
 		else
-			echo -n >&2 "Do you want us to update your CXDEV environment with version ${CXDEV_VERSION}? [y/N] "
-			read runUpdate
+			runUpdate=$(_readYesNo "Do you want us to update your CXDEV environment with version ${CXDEV_VERSION}? [y/N] " "N")
 			if [[ "Y" != "$runUpdate" && "y" != "$runUpdate" ]]; then
-				echo "Installer aborted."
-				exit 1
+				echo "Installer aborted, CXDEV environment was not updated."
+				exit 0
 			else
 				find ${CXDEV_INSTALL_DIR} -type f -not \( -name "dependencies" -prune \) -exec rm -rf {} \;
 			fi
@@ -112,8 +111,7 @@ _installCXDEVEnvironment () {
 		echo "- SDKman found!"
 	else
 		echo "- SDKman not found!"
-		echo -n >&2 "  Do you want us to install SDKman for you? [Y/n] "
-		read installSDKman
+		installSDKman=$(_readYesNo "  Do you want us to install SDKman for you? [Y/n] " "Y")
 		if [[ "n" == "$installSDKman" || "N" == "$installSDKman" ]]; then
 			echo "  SDKman installation skipped!"
 			unresolved_dependencies+=1
@@ -126,9 +124,7 @@ _installCXDEVEnvironment () {
 		echo "- nodenv found!"
 	else
 		echo "- nodenv not found!"
-
-		echo -n >&2 "  Do you want us to install nodenv for you? [Y/n] "
-		read installNodenv
+		installNodenv=$(_readYesNo "  Do you want us to install nodenv for you? [Y/n] " "Y")
 		if [[ "n" == "$installNodenv" || "N" == "$installNodenv" ]]; then
 			echo "  nodenv installation skipped!"
 			unresolved_dependencies+=1
@@ -219,6 +215,24 @@ END
 	echo ""
 	echo "Thank you for using CXDEV environment :)"
 	echo ""
+}
+
+_readYesNo () {
+	local prompt="$1"
+	local default="$2"
+	local answer
+
+	if [[ -n "$NONINTERACTIVE" ]]; then
+		answer="Y"
+	else
+		read -r -p "$prompt" answer </dev/tty
+	fi
+
+	if [[ -z "$answer" ]]; then
+		answer="$default"
+	fi
+
+	echo "$answer"
 }
 
 _installSDKman () {
