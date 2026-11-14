@@ -225,6 +225,7 @@ required and one optional artefacts:
 
 - [SAP Artefacts](./dependencies/sapartefacts/README.md)
 - [SAP JCO Connector](./dependencies/sapjco/README.md)
+- [SAP Commerce Cloud CLI](./dependencies/sapccm/README.md)
 
 Restart your terminal once again and you are ready to start working with CXDEV!
 
