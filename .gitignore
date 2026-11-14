@@ -30,6 +30,7 @@ tools/*
 !tools/.gitkeep
 
 # Configuration Profiles
+.version
 configuration/enabled/*
 
 # Gradle
