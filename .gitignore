@@ -32,6 +32,10 @@ tools/*
 # Configuration Profiles
 configuration/enabled/*
 
+# Gradle
+.gradle/
+build/
+
 # Avoid checkin of private key
 certificates/local.cxdev.me.key
 

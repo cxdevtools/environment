@@ -45,9 +45,14 @@ _installCXDEVEnvironment () (
 		fi
 	done
 	release=$(_latestRelease cxdevtools/environment) || return 1
-	if ! version=$(jq -er '.tag_name | strings | select(length > 0)' <<<"$release") \
-		|| ! archive_url=$(jq -er '.zipball_url | strings | select(startswith("https://api.github.com/repos/cxdevtools/environment/zipball/"))' <<<"$release"); then
-		echo "The latest CXDEV release is missing its tag or source ZIP URL." >&2
+	if ! version=$(jq -er '.tag_name | strings | select(length > 0)' <<<"$release"); then
+		echo "The latest CXDEV release is missing its tag." >&2
+		return 1
+	fi
+	# Older releases only have GitHub's automatically generated source ZIP.
+	if ! archive_url=$(_releaseAssetUrl cxdevtools/environment "environment-${version#v}.zip" <<<"$release") \
+		&& ! archive_url=$(jq -er '.zipball_url | strings | select(startswith("https://api.github.com/repos/cxdevtools/environment/zipball/"))' <<<"$release"); then
+		echo "The latest CXDEV release has no downloadable ZIP." >&2
 		return 1
 	fi
 
@@ -142,7 +147,7 @@ _installCXDEVEnvironment () (
 	trap 'rm -rf "$stage_dir"' EXIT
 	_downloadReleaseZip "$archive_url" "$stage_dir" || return 1
 
-	# GitHub wraps the source ZIP in a directory whose name depends on the archive endpoint.
+	# Both ZIP formats have a top-level directory, with different naming schemes.
 	for candidate in "$stage_dir"/extracted/*; do
 		if [ -f "$candidate/cxdev.sh" ] && [ -d "$candidate/helper" ]; then
 			source_dir=$candidate
@@ -150,7 +155,7 @@ _installCXDEVEnvironment () (
 		fi
 	done
 	if [ -z "$source_dir" ]; then
-		echo "The CXDEV source ZIP is missing cxdev.sh or helper/." >&2
+		echo "The CXDEV release ZIP is missing cxdev.sh or helper/." >&2
 		return 1
 	fi
 
@@ -306,6 +311,14 @@ _latestRelease () {
 		}
 }
 
+_releaseAssetUrl () {
+	local repository="$1" asset_name="$2"
+	jq -er --arg name "$asset_name" --arg prefix "https://github.com/$repository/releases/download/" '
+		.assets[] | select(.name == $name and .state == "uploaded") | .browser_download_url
+		| strings | select(startswith($prefix))
+	'
+}
+
 _downloadReleaseZip () {
 	local url="$1" stage_dir="$2"
 	local archive="$stage_dir/release.zip" entries
@@ -333,10 +346,7 @@ _refreshTools () (
 	release=$(_latestRelease cxdevtools/certificate-exchange) || return 1
 	version=$(jq -er '.tag_name | strings | select(length > 0) | ltrimstr("v")' <<<"$release") || return 1
 	asset_name="certtool-$version.zip"
-	if ! asset_url=$(jq -er --arg name "$asset_name" '
-		.assets[] | select(.name == $name and .state == "uploaded") | .browser_download_url
-		| strings | select(startswith("https://github.com/cxdevtools/certificate-exchange/releases/download/"))
-	' <<<"$release"); then
+	if ! asset_url=$(_releaseAssetUrl cxdevtools/certificate-exchange "$asset_name" <<<"$release"); then
 		echo "The latest certtool release is missing $asset_name." >&2
 		return 1
 	fi

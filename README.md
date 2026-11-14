@@ -186,8 +186,9 @@ The installation of CXDEV is also very simple by running the following prompt:
 bash <(curl -fsSL https://raw.githubusercontent.com/cxdevtools/environment/refs/heads/develop/install.sh)
 ```
 
-The installer fetches the latest published Environment release from GitHub and installs its source
-ZIP. Existing installations are prompted before an Environment update.
+The installer downloads the distribution ZIP from the latest published Environment release on
+GitHub. For older releases without a distribution ZIP, it uses GitHub's source ZIP. Existing
+installations are prompted before an Environment update.
 
 ### Separately released tools
 
@@ -251,3 +252,13 @@ there for further details about configuration options.
 
 The environment improves continuously and can be updated easily by using the 
 `yupdateenvironment` shortcut or by reexecuting the [installation command](#installation).
+
+## Building and publishing a release
+
+Run `./gradlew releaseZip` to build `build/release/environment-<version>.zip` locally.
+The default version is set in [gradle.properties](gradle.properties).
+
+Before releasing, update [RELEASE_NOTES.md](RELEASE_NOTES.md) on the commit you want to tag.
+Pushing a version tag such as `1.3.6` or `v1.3.6` publishes a GitHub release titled
+`Release 1.3.6` with those notes and the ZIP attached. The workflow uses the tag as the build
+version. If you publish a release manually in GitHub, the workflow also attaches its ZIP.
