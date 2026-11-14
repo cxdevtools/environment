@@ -18,7 +18,7 @@ cxdev_bashrc="${HOME}/.bashrc"
 cxdev_zshrc="${ZDOTDIR:-${HOME}}/.zshrc"
 
 # Global variables
-export CXDEV_INSTALL_DIR="${CXDEV_INSTALL_DIR:-$HOME/.cxdev}"
+export CXDEV_INSTALL_DIR="${CXDEV_INSTALL_DIR:-${CXDEVHOME:-$HOME/.cxdev}}"
 
 _installCXDEVEnvironment () (
 	local release version archive_url installedVersion runUpdate stage_dir source_dir candidate keypass required
