@@ -48,7 +48,11 @@ _installCXDEVEnvironment () {
 		echo ""
 
 		if [[ "$installedVersion" == "$CXDEV_VERSION" ]]; then
-			echo "This version is already installed."
+			echo "The CXDEV files are already current. Refreshing bundled tools."
+			if ! _refreshTools; then
+				echo "Failed to refresh bundled tools."
+				exit 1
+			fi
 			exit 0
 		else
 			runUpdate=$(_readYesNo "Do you want us to update your CXDEV environment with version ${CXDEV_VERSION}? [y/N] " "N")
@@ -180,6 +184,12 @@ _installCXDEVEnvironment () {
 	KEYPASS=$(grep "^tomcat\\.ssl\\.keystore\\.password=" "${CXDEV_INSTALL_DIR}/configuration/profiles/81-ssl.properties" | awk '{split($0, a, "="); print a[2]}')
 	openssl pkcs12 -in "$CXDEV_INSTALL_DIR/certificates/local.cxdev.me.p12" -passin pass:$KEYPASS -nodes -nocerts -out "$CXDEV_INSTALL_DIR/tmp/local.cxdev.me.key"
 	tail -n +5 "$CXDEV_INSTALL_DIR/tmp/local.cxdev.me.key" > $CXDEV_INSTALL_DIR/certificates/local.cxdev.me.key
+
+	# Install the latest separately released tools.
+	if ! _refreshTools; then
+		echo "Failed to install bundled tools."
+		exit 1
+	fi
 	
 	# store version
 	echo "$CXDEV_VERSION" > "$CXDEV_INSTALL_DIR/.version"
@@ -310,6 +320,87 @@ _installNodEnv () {
 
 _indentInstallerOutput () {
 	sed 's/^/[INSTALLER] /'
+}
+
+_refreshTools () {
+	local releases_url="https://api.github.com/repos/cxdevtools/certificate-exchange/releases/latest"
+	local stage_dir="$CXDEV_INSTALL_DIR/tmp/certtool.$$.tmp"
+	local tools_dir="$CXDEV_INSTALL_DIR/tools"
+	local release_json asset_url asset_name asset_version zip_file extract_dir target_dir backup_dir required
+
+	for required in curl grep sed unzip; do
+		if ! type "$required" >/dev/null 2>&1; then
+			echo "Required command for certtool download is missing: $required"
+			return 1
+		fi
+	done
+
+	mkdir -p "$CXDEV_INSTALL_DIR/tmp" "$tools_dir" || return 1
+	rm -rf "$stage_dir"
+	mkdir -p "$stage_dir/extracted" || return 1
+
+	echo "Checking latest certtool release on GitHub."
+	if ! release_json=$(curl --fail --location --silent --show-error \
+		-H "Accept: application/vnd.github+json" \
+		-H "X-GitHub-Api-Version: 2022-11-28" "$releases_url"); then
+		rm -rf "$stage_dir"
+		return 1
+	fi
+
+	asset_url=$(printf '%s\n' "$release_json" \
+		| grep -Eo '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*/certtool-[^"]+\.zip"' \
+		| sed -E 's/.*"([^"]+)".*/\1/' | head -n 1)
+	if [ -z "$asset_url" ]; then
+		echo "No certtool-<version>.zip asset was found in the latest published release."
+		rm -rf "$stage_dir"
+		return 1
+	fi
+
+	asset_name="${asset_url##*/}"
+	asset_version="${asset_name#certtool-}"
+	asset_version="${asset_version%.zip}"
+	zip_file="$stage_dir/$asset_name"
+	extract_dir="$stage_dir/extracted"
+	target_dir="$tools_dir/certtool"
+	backup_dir="$tools_dir/.certtool-old.$$"
+
+	echo "Downloading $asset_name."
+	if ! curl --fail --location --silent --show-error --output "$zip_file" "$asset_url" \
+		|| ! unzip -tq "$zip_file" >/dev/null; then
+		echo "Could not download or validate $asset_name."
+		rm -rf "$stage_dir"
+		return 1
+	fi
+
+	if unzip -Z1 "$zip_file" | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
+		echo "The certtool archive contains an unsafe path."
+		rm -rf "$stage_dir"
+		return 1
+	fi
+	if ! unzip -q "$zip_file" -d "$extract_dir" \
+		|| [ ! -f "$extract_dir/bin/cxdev-certificates" ] \
+		|| [ ! -f "$extract_dir/lib/certtool-$asset_version.jar" ]; then
+		echo "The certtool archive is missing its launcher or application JAR."
+		rm -rf "$stage_dir"
+		return 1
+	fi
+	chmod +x "$extract_dir/bin/cxdev-certificates" "$extract_dir/bin/cxdev-certificates.bat" 2>/dev/null || true
+
+	# Swap the complete tool directory so old releases leave no stale files behind.
+	rm -rf "$backup_dir"
+	if [ -e "$target_dir" ] && ! mv "$target_dir" "$backup_dir"; then
+		rm -rf "$stage_dir"
+		return 1
+	fi
+	if ! mv "$extract_dir" "$target_dir"; then
+		[ ! -e "$backup_dir" ] || mv "$backup_dir" "$target_dir"
+		rm -rf "$stage_dir"
+		return 1
+	fi
+	rm -rf "$backup_dir" "$stage_dir"
+
+	echo "Installed certtool $asset_version in $target_dir."
+	return 0
 }
 
 _installCXDEVEnvironment

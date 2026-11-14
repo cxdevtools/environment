@@ -188,6 +188,16 @@ bash <(curl -fsSL https://raw.githubusercontent.com/cxdevtools/environment/refs/
 
 Everything else will be done by the installer.
 
+### Separately released tools
+
+The installer also downloads the ZIP attached to the latest published release of
+[`cxdevtools/certificate-exchange`](https://github.com/cxdevtools/certificate-exchange/releases/latest)
+and installs it under `$CXDEVHOME/tools/certtool`. The release is fetched and this tool directory is
+replaced on every installer run, including when the CXDEV environment version is already current.
+The `cxdev.sh` initializer adds each `tools/<tool>/bin` directory to `PATH`; after installation,
+`cxdev-certificates` is available in new terminals. The certtool release itself is not stored in the
+CXDEV environment repository.
+
 ## Post-Installation topics
 
 In order to use of the CXDEV environment, please make sure that you have

@@ -25,6 +25,10 @@ dependencies/sapjco/sapjco*/
 dependencies/sapjco/current
 dependencies/sapjco/current/*
 
+# Independently released CLI tools installed by install.sh
+tools/*
+!tools/.gitkeep
+
 # Configuration Profiles
 configuration/enabled/*
 
