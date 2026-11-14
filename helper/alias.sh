@@ -6,7 +6,7 @@ alias ygc='yGlobalConfig'
 alias yloadworkspace='yLoadWorkspace'
 alias yglobalconfig='yGlobalConfig'
 alias yextendlicense='yExtendLicense'
-alias yupdateenvironment='bash <(curl -fsSL https://raw.githubusercontent.com/sapcxtools/environment/refs/heads/develop/install.sh)'
+alias yupdateenvironment='bash <(curl -fsSL https://raw.githubusercontent.com/cxdevtools/environment/refs/heads/develop/install.sh)'
 
 alias toworkspace='cd "$CXDEV_WORKSPACE_HOME"'
 alias toplatform='cd "$CXDEV_PLATFORM_HOME"'

@@ -82,7 +82,6 @@ complete list as a reference:
 - `find`
 - `grep`
 - `ln`
-- `md5sum`
 - `readlink`
 - `realpath`
 - `sed`
@@ -93,8 +92,9 @@ complete list as a reference:
 #### Recommended (you still may need to install them manually)
 
 - `curl` (see https://curl.se/)
-- `jq` (see https://jqlang.github.io/jq/)
 - `openssl` (see https://www.openssl.org/)
+
+The installer requires `jq` to read GitHub release metadata.
 
 Command for Ubuntu: `sudo apt install curl jq openssl`
 Command for Mac OS: `brew install curl jq openssl`
@@ -186,14 +186,16 @@ The installation of CXDEV is also very simple by running the following prompt:
 bash <(curl -fsSL https://raw.githubusercontent.com/cxdevtools/environment/refs/heads/develop/install.sh)
 ```
 
-Everything else will be done by the installer.
+The installer fetches the latest published Environment release from GitHub and installs its source
+ZIP. Existing installations are prompted before an Environment update.
 
 ### Separately released tools
 
 The installer also downloads the ZIP attached to the latest published release of
 [`cxdevtools/certificate-exchange`](https://github.com/cxdevtools/certificate-exchange/releases/latest)
-and installs it under `$CXDEVHOME/tools/certtool`. The release is fetched and this tool directory is
-replaced on every installer run, including when the CXDEV environment version is already current.
+and installs it under `$CXDEVHOME/tools/certtool`. The installer refreshes certtool on installation
+and update, including when the CXDEV environment version is already current. The separately
+provisioned SAP CLI in `tools/certtool/tools/` is preserved during a refresh.
 The `cxdev.sh` initializer adds each `tools/<tool>/bin` directory to `PATH`; after installation,
 `cxdev-certificates` is available in new terminals. The certtool release itself is not stored in the
 CXDEV environment repository.

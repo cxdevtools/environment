@@ -18,12 +18,11 @@ cxdev_bashrc="${HOME}/.bashrc"
 cxdev_zshrc="${ZDOTDIR:-${HOME}}/.zshrc"
 
 # Global variables
-export CXDEV_DOWNLOAD_URL="https://github.com/cxdevtools/environment/archive/refs/tags/"
-export CXDEV_VERSION="1.3.5"
-export CXDEV_HASH="daa22017c63c8d6408546453ace1dcfa"
 export CXDEV_INSTALL_DIR="${CXDEV_INSTALL_DIR:-$HOME/.cxdev}"
 
-_installCXDEVEnvironment () {
+_installCXDEVEnvironment () (
+	local release version archive_url installedVersion runUpdate stage_dir source_dir candidate keypass required
+
 	echo "  ___  _  _  ____  ____  _  _ "
 	echo " / __)( \\/ )(    \\(  __)/ )( \\"
 	echo "( (__  )  (  ) D ( ) _) \\ \\/ /"
@@ -35,32 +34,41 @@ _installCXDEVEnvironment () {
 	echo " \\___  >___|  /\\_/ |__||__|   \\____/|___|  /__|_|  /\\___  >___|  /__|  ";
 	echo "     \\/     \\/                           \\/      \\/     \\/     \\/      ";
 	echo ""
-	echo "Welcome to CXDEV environment installer, v${CXDEV_VERSION}"
+	echo "Welcome to CXDEV environment installer"
 	echo ""
+
+	# Both release downloads need these commands, even on a tools-only refresh.
+	for required in curl jq unzip; do
+		if ! command -v "$required" >/dev/null 2>&1; then
+			echo "Please install $required and rerun the installer." >&2
+			return 1
+		fi
+	done
+	release=$(_latestRelease cxdevtools/environment) || return 1
+	if ! version=$(jq -er '.tag_name | strings | select(length > 0)' <<<"$release") \
+		|| ! archive_url=$(jq -er '.zipball_url | strings | select(startswith("https://api.github.com/repos/cxdevtools/environment/zipball/"))' <<<"$release"); then
+		echo "The latest CXDEV release is missing its tag or source ZIP URL." >&2
+		return 1
+	fi
 
 	# Check if already installed
 	if [ -f "$CXDEV_INSTALL_DIR/.version" ]; then
-		installedVersion=$(cat $CXDEV_INSTALL_DIR/.version)
+		installedVersion=$(cat "$CXDEV_INSTALL_DIR/.version")
 
 		echo "You already have CXDEV environment installed."
 		echo "- Path   : ${CXDEV_INSTALL_DIR}"
 		echo "- Version: ${installedVersion}"
 		echo ""
 
-		if [[ "$installedVersion" == "$CXDEV_VERSION" ]]; then
+		if [[ "$installedVersion" == "$version" ]]; then
 			echo "The CXDEV files are already current. Refreshing bundled tools."
-			if ! _refreshTools; then
-				echo "Failed to refresh bundled tools."
-				exit 1
-			fi
-			exit 0
+			_refreshTools
+			return $?
 		else
-			runUpdate=$(_readYesNo "Do you want us to update your CXDEV environment with version ${CXDEV_VERSION}? [y/N] " "N")
+			runUpdate=$(_readYesNo "Do you want us to update your CXDEV environment with version ${version}? [y/N] " "N")
 			if [[ "Y" != "$runUpdate" && "y" != "$runUpdate" ]]; then
 				echo "Installer aborted, CXDEV environment was not updated."
 				exit 0
-			else
-				find ${CXDEV_INSTALL_DIR} -type f -not \( -name "dependencies" -prune \) -exec rm -rf {} \;
 			fi
 		fi
 	fi
@@ -76,20 +84,6 @@ _installCXDEVEnvironment () {
 		echo "- awk not found!"
 	fi
 
-	if type curl 2>&1 > /dev/null ; then
-		echo "- curl found!"
-	else
-		unresolved_dependencies+=1
-		echo "- curl not found!"
-	fi
-
-	if type md5sum 2>&1 > /dev/null ; then
-		echo "- md5sum found!"
-	else
-		unresolved_dependencies+=1
-		echo "- md5sum not found!"
-	fi
-
 	if type openssl 2>&1 > /dev/null ; then
 		echo "- openssl found!"
 	else
@@ -102,13 +96,6 @@ _installCXDEVEnvironment () {
 	else
 		unresolved_dependencies+=1
 		echo "- sed not found!"
-	fi
-
-	if type unzip 2>&1 > /dev/null ; then
-		echo "- unzip found!"
-	else
-		unresolved_dependencies+=1
-		echo "- unzip not found!"
 	fi
 
 	if [ ! -z "$SDKMAN_DIR" ] ; then
@@ -142,61 +129,40 @@ _installCXDEVEnvironment () {
 		echo "Please install all dependencies on your system using your favourite package manager and then restart the installer."
 		echo "- Linux example: sudo apt install curl jq openssl"
 		echo "- MacOS example: brew install curl jq openssl"
-		exit
+		exit 1
 	fi
 
 	echo ""
 	echo "Attempt to install CXDEV environment"
-	echo "- version : ${CXDEV_VERSION}"
+	echo "- version : ${version}"
 	echo "- location: ${CXDEV_INSTALL_DIR}"
 	echo ""
-    
-	# Create structure
-	mkdir -p $CXDEV_INSTALL_DIR
-	mkdir -p $CXDEV_INSTALL_DIR/tmp
 
-	# Download
-	echo "Fetch CXDEV environment from: ${CXDEV_DOWNLOAD_URL}${CXDEV_VERSION}.zip"
-	cxdev_zip_file="${CXDEV_INSTALL_DIR}/tmp/cxdev-${CXDEV_VERSION}.zip"
-	curl --fail --location -o "$cxdev_zip_file" "${CXDEV_DOWNLOAD_URL}${CXDEV_VERSION}.zip"
+	stage_dir=$(mktemp -d "${TMPDIR:-/tmp}/cxdev-environment.XXXXXXXX") || return 1
+	trap 'rm -rf "$stage_dir"' EXIT
+	_downloadReleaseZip "$archive_url" "$stage_dir" || return 1
 
-	# check integrity
-	ARCHIVE_OK=$(unzip -qt "$cxdev_zip_file" | grep 'No errors detected in compressed data')
-	ARCHIVE_INTEGRITY=($(md5sum "$cxdev_zip_file"))
-	if [[ -z "$ARCHIVE_OK" || "$ARCHIVE_INTEGRITY" != "$CXDEV_HASH" ]]; then
-		echo "Downloaded ZIP archive is corrupt."
-		echo "- Are you connected to the internet?"
-		echo "- Are you using a proxy server?"
-		echo "- Is the downloaded file valid?"
-		exit 1
+	# GitHub wraps the source ZIP in a directory whose name depends on the archive endpoint.
+	for candidate in "$stage_dir"/extracted/*; do
+		if [ -f "$candidate/cxdev.sh" ] && [ -d "$candidate/helper" ]; then
+			source_dir=$candidate
+			break
+		fi
+	done
+	if [ -z "$source_dir" ]; then
+		echo "The CXDEV source ZIP is missing cxdev.sh or helper/." >&2
+		return 1
 	fi
 
-	# extract archive
-	echo "Extract successfully downloaded ZIP archive."
-	unzip -qo "$cxdev_zip_file" -d "$CXDEV_INSTALL_DIR/tmp"
+	# Prepare the local development key before copying the release over the installation.
+	keypass=$(awk '/^tomcat\.ssl\.keystore\.password=/ {print substr($0, index($0, "=") + 1); exit}' \
+		"$source_dir/configuration/profiles/81-ssl.properties") || return 1
+	openssl pkcs12 -in "$source_dir/certificates/local.cxdev.me.p12" -passin "pass:$keypass" \
+		-nodes -nocerts -out "$stage_dir/local.cxdev.me.key" || return 1
+	(umask 077; tail -n +5 "$stage_dir/local.cxdev.me.key" > "$source_dir/certificates/local.cxdev.me.key") || return 1
 
-	# copy over files
 	echo "Copy files to installation location."
-	cp -r "$CXDEV_INSTALL_DIR/tmp/environment-$CXDEV_VERSION/." "$CXDEV_INSTALL_DIR"
-
-	# recreate private key
-	rm -f "$CXDEV_INSTALL_DIR/certificates/local.cxdev.me.key"
-	KEYPASS=$(grep "^tomcat\\.ssl\\.keystore\\.password=" "${CXDEV_INSTALL_DIR}/configuration/profiles/81-ssl.properties" | awk '{split($0, a, "="); print a[2]}')
-	openssl pkcs12 -in "$CXDEV_INSTALL_DIR/certificates/local.cxdev.me.p12" -passin pass:$KEYPASS -nodes -nocerts -out "$CXDEV_INSTALL_DIR/tmp/local.cxdev.me.key"
-	tail -n +5 "$CXDEV_INSTALL_DIR/tmp/local.cxdev.me.key" > $CXDEV_INSTALL_DIR/certificates/local.cxdev.me.key
-
-	# Install the latest separately released tools.
-	if ! _refreshTools; then
-		echo "Failed to install bundled tools."
-		exit 1
-	fi
-	
-	# store version
-	echo "$CXDEV_VERSION" > "$CXDEV_INSTALL_DIR/.version"
-
-	# clean up
-	echo "Cleaning up temporary files."
-	rm -rf "$CXDEV_INSTALL_DIR/tmp"
+	mkdir -p "$CXDEV_INSTALL_DIR" && cp -r "$source_dir/." "$CXDEV_INSTALL_DIR" || return 1
 
 	# link in profile
 	cxdev_init_snippet=$(cat <<-END
@@ -205,13 +171,20 @@ source "$CXDEV_INSTALL_DIR/cxdev.sh"
 #export CXDEVSYNCDIR="/mnt/sapartefacts"
 END
 )
-	if [ -w $cxdev_zshrc ] && ! grep -q "cxdev.sh" "$cxdev_zshrc"; then
+	if [ -w "$cxdev_zshrc" ] && ! grep -q "cxdev.sh" "$cxdev_zshrc"; then
 		echo "Adding cxdev initialization snippet to: $cxdev_zshrc"
 		echo -e "\n$cxdev_init_snippet" >> "$cxdev_zshrc"
 	fi
-	if [ -w $cxdev_bashrc ] && ! grep -q "cxdev.sh" "$cxdev_bashrc"; then
+	if [ -w "$cxdev_bashrc" ] && ! grep -q "cxdev.sh" "$cxdev_bashrc"; then
 		echo "Adding cxdev initialization snippet to: $cxdev_bashrc"
 		echo -e "\n$cxdev_init_snippet" >> "$cxdev_bashrc"
+	fi
+
+	# Record the environment update so a failed tool download can be retried on its own.
+	echo "$version" > "$CXDEV_INSTALL_DIR/.version" || return 1
+	if ! _refreshTools; then
+		echo "CXDEV environment installed. Rerun the installer to refresh its tools." >&2
+		return 1
 	fi
 
 	echo ""
@@ -225,7 +198,7 @@ END
 	echo ""
 	echo "Thank you for using CXDEV environment :)"
 	echo ""
-}
+)
 
 _readYesNo () {
 	local prompt="$1"
@@ -322,85 +295,81 @@ _indentInstallerOutput () {
 	sed 's/^/[INSTALLER] /'
 }
 
-_refreshTools () {
-	local releases_url="https://api.github.com/repos/cxdevtools/certificate-exchange/releases/latest"
-	local stage_dir="$CXDEV_INSTALL_DIR/tmp/certtool.$$.tmp"
-	local tools_dir="$CXDEV_INSTALL_DIR/tools"
-	local release_json asset_url asset_name asset_version zip_file extract_dir target_dir backup_dir required
-
-	for required in curl grep sed unzip; do
-		if ! type "$required" >/dev/null 2>&1; then
-			echo "Required command for certtool download is missing: $required"
-			return 1
-		fi
-	done
-
-	mkdir -p "$CXDEV_INSTALL_DIR/tmp" "$tools_dir" || return 1
-	rm -rf "$stage_dir"
-	mkdir -p "$stage_dir/extracted" || return 1
-
-	echo "Checking latest certtool release on GitHub."
-	if ! release_json=$(curl --fail --location --silent --show-error \
+_latestRelease () {
+	local repository="$1"
+	curl --fail --location --silent --show-error --proto '=https' --proto-redir '=https' \
 		-H "Accept: application/vnd.github+json" \
-		-H "X-GitHub-Api-Version: 2022-11-28" "$releases_url"); then
-		rm -rf "$stage_dir"
+		-H "X-GitHub-Api-Version: 2022-11-28" \
+		"https://api.github.com/repos/$repository/releases/latest" || {
+			echo "Could not fetch the latest GitHub release for $repository." >&2
+			return 1
+		}
+}
+
+_downloadReleaseZip () {
+	local url="$1" stage_dir="$2"
+	local archive="$stage_dir/release.zip" entries
+
+	echo "Downloading $url."
+	if ! curl --fail --location --silent --show-error --proto '=https' --proto-redir '=https' \
+		--output "$archive" "$url" || ! unzip -tq "$archive" >/dev/null; then
+		echo "Could not download or validate the release ZIP." >&2
 		return 1
 	fi
 
-	asset_url=$(printf '%s\n' "$release_json" \
-		| grep -Eo '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*/certtool-[^"]+\.zip"' \
-		| sed -E 's/.*"([^"]+)".*/\1/' | head -n 1)
-	if [ -z "$asset_url" ]; then
-		echo "No certtool-<version>.zip asset was found in the latest published release."
-		rm -rf "$stage_dir"
+	entries=$(unzip -Z1 "$archive") || return 1
+	if grep -Eq '(^/|(^|/)\.\.(/|$))' <<<"$entries"; then
+		echo "The release ZIP contains an unsafe path." >&2
+		return 1
+	fi
+	unzip -q "$archive" -d "$stage_dir/extracted"
+}
+
+_refreshTools () (
+	local tools_dir="$CXDEV_INSTALL_DIR/tools"
+	local target_dir="$tools_dir/certtool"
+	local release version asset_name asset_url stage_dir extract_dir init_file
+
+	release=$(_latestRelease cxdevtools/certificate-exchange) || return 1
+	version=$(jq -er '.tag_name | strings | select(length > 0) | ltrimstr("v")' <<<"$release") || return 1
+	asset_name="certtool-$version.zip"
+	if ! asset_url=$(jq -er --arg name "$asset_name" '
+		.assets[] | select(.name == $name and .state == "uploaded") | .browser_download_url
+		| strings | select(startswith("https://github.com/cxdevtools/certificate-exchange/releases/download/"))
+	' <<<"$release"); then
+		echo "The latest certtool release is missing $asset_name." >&2
 		return 1
 	fi
 
-	asset_name="${asset_url##*/}"
-	asset_version="${asset_name#certtool-}"
-	asset_version="${asset_version%.zip}"
-	zip_file="$stage_dir/$asset_name"
+	mkdir -p "$tools_dir" || return 1
+	stage_dir=$(mktemp -d "$tools_dir/.certtool.XXXXXXXX") || return 1
+	trap 'rm -rf "$stage_dir"' EXIT
+	_downloadReleaseZip "$asset_url" "$stage_dir" || return 1
 	extract_dir="$stage_dir/extracted"
-	target_dir="$tools_dir/certtool"
-	backup_dir="$tools_dir/.certtool-old.$$"
-
-	echo "Downloading $asset_name."
-	if ! curl --fail --location --silent --show-error --output "$zip_file" "$asset_url" \
-		|| ! unzip -tq "$zip_file" >/dev/null; then
-		echo "Could not download or validate $asset_name."
-		rm -rf "$stage_dir"
+	if [ ! -f "$extract_dir/bin/cxdev-certificates" ] || [ ! -f "$extract_dir/lib/certtool-$version.jar" ]; then
+		echo "The certtool archive is missing its launcher or application JAR." >&2
 		return 1
 	fi
+	chmod +x "$extract_dir/bin/cxdev-certificates" || return 1
 
-	if unzip -Z1 "$zip_file" | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
-		echo "The certtool archive contains an unsafe path."
-		rm -rf "$stage_dir"
-		return 1
+	# The SAP CLI is provisioned separately from the certtool release.
+	if [ -d "$target_dir/tools" ]; then
+		mkdir -p "$extract_dir/tools" && cp -pR "$target_dir/tools/." "$extract_dir/tools" || return 1
 	fi
-	if ! unzip -q "$zip_file" -d "$extract_dir" \
-		|| [ ! -f "$extract_dir/bin/cxdev-certificates" ] \
-		|| [ ! -f "$extract_dir/lib/certtool-$asset_version.jar" ]; then
-		echo "The certtool archive is missing its launcher or application JAR."
-		rm -rf "$stage_dir"
-		return 1
-	fi
-	chmod +x "$extract_dir/bin/cxdev-certificates" "$extract_dir/bin/cxdev-certificates.bat" 2>/dev/null || true
 
-	# Swap the complete tool directory so old releases leave no stale files behind.
-	rm -rf "$backup_dir"
-	if [ -e "$target_dir" ] && ! mv "$target_dir" "$backup_dir"; then
-		rm -rf "$stage_dir"
-		return 1
+	if [ -e "$target_dir" ] || [ -L "$target_dir" ]; then
+		mv "$target_dir" "$stage_dir/previous" || return 1
 	fi
 	if ! mv "$extract_dir" "$target_dir"; then
-		[ ! -e "$backup_dir" ] || mv "$backup_dir" "$target_dir"
-		rm -rf "$stage_dir"
+		if { [ -e "$stage_dir/previous" ] || [ -L "$stage_dir/previous" ]; } \
+			&& ! mv "$stage_dir/previous" "$target_dir"; then
+			trap - EXIT
+			echo "Could not restore certtool. The previous installation is in $stage_dir/previous." >&2
+		fi
 		return 1
 	fi
-	rm -rf "$backup_dir" "$stage_dir"
 
-	echo "Installed certtool $asset_version in $target_dir."
-	return 0
-}
+	echo "Installed certtool $version in $target_dir."
+)
 
 _installCXDEVEnvironment
